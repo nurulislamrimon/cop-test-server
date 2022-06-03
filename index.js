@@ -23,15 +23,35 @@ async function run() {
         await client.connect();
         const membersCollection = client.db('copMembers').collection('member');
 
-        app.get('/finance', async (req, res) => {
+        function verifyJWT(req, res, next) {
+            const token = req.headers.authorization;
+            if (!token) {
+                return res.status(401).send({ message: 'unauthorized access' })
+            }
+            jwt.verify(token, process.env.secret, (err, decoded) => {
+                if (err) {
+                    return res.status(403).send({ message: 'Forbidden' })
+                }
+                req.decoded = decoded;
+                next()
+            })
+            console.log('decoded', token);
+        }
+
+        // finance
+        app.get('/finance', verifyJWT, async (req, res) => {
+            const decodedEmail = req.decoded.email;
             const email = req.query.email;
-            const query = { email: email }
-            const cursor = membersCollection.find(query);
-            const result = await cursor.toArray();
-            res.send(result)
+            if (decodedEmail === email) {
+                const query = { email: email }
+                const cursor = membersCollection.find(query);
+                const result = await cursor.toArray();
+                res.send(result)
+            } else {
+                res.send({ message: 'forbidden' })
+            }
         })
-
-
+        // members
         app.get('/members', async (req, res) => {
             const query = {};
             const options = {
@@ -42,6 +62,7 @@ async function run() {
             console.log('all members responding');
             res.send(result)
         })
+        // user
         app.get('/user/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: ObjectId(id) }
@@ -73,9 +94,10 @@ async function run() {
             console.log(newUserData, "is updated");
             // res.send(id)
         })
+
         app.post('/login', (req, res) => {
             const user = req.body;
-            const accessToken = jwt.sign(user, process.env.JW_token, {
+            const accessToken = jwt.sign(user, process.env.secret, {
                 expiresIn: '1d'
             })
             res.send({ accessToken })
